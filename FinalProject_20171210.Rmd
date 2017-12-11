@@ -661,9 +661,9 @@ p <- wine_v7_ml %>%
   labs(y= "Predicted Ratings", x="Actual Ratings",title="Predicted vs. Actual Ratings Using Random Forest") +
   theme_economist()
 
- jpeg(filename="predvsactual.jpg", width = 426, height = 288)
+ # jpeg(filename="predvsactual.jpg", width = 426, height = 288)
  p
- dev.off()
+ # dev.off()
  
  fit
 
