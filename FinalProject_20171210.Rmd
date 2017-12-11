@@ -320,8 +320,6 @@ wine_v4 <- wine_v3 %>% filter(is.na(longitude) == FALSE & variety %in% redwines)
 
 load(file="wine_v7.RData")
 
-
-
 ```
 
 
@@ -583,6 +581,7 @@ if(!require(caret)){
 set.seed(658)
 
 ##Create a dataset with no missing information
+##also, reset wine variety as factor because it current recognizes >700 levels of variety from the original dataset when there are now only 35 in our final dataset
 wine_v7_ml <- wine_v7 %>% 
   filter(avgtemp!=999 & 
            avgprcp!=999 & 
@@ -590,58 +589,83 @@ wine_v7_ml <- wine_v7 %>%
            is.na(price)==FALSE & 
            is.na(longitude)==FALSE &
            is.na(variety)==FALSE &
-           is.na(winery)==FALSE &
-           is.na(year)==FALSE)
+           is.na(year)==FALSE) %>%
+  mutate(variety = as.factor(as.character(variety)))
 
 ##rows in final dataset
 nrow(wine_v7_ml)
          
 ##Step 1: run a basic random forest to get started
 
-fit <- randomForest(points ~ price + longitude + latitude + 
-                      variety + winery + 
-                      as.numeric(year) + avgtemp + avgprcp,
+fit <- randomForest(points ~ price + longitude + latitude  + variety +
+                      year + avgtemp + avgprcp,
                       data=wine_v7_ml, 
                       importance=TRUE, 
                       ntree=500)
 
-head(wine_v7_ml)
+fit
 
-##step 1: split into a testing and training dataset
-
-train_index <- createDataPartition(y, times = 1, p = 0.7, list = FALSE)
-
-
-train_set <- heights[train_index, ]
-test_set <- heights[-train_index, ]
-
-#this website is great
-#http://theanalyticalminds.blogspot.com/2015/04/part-4a-modelling-predicting-amount-of.html
-
-
-
-##simple code (start with few trees)
-
-########Set temp and prec to the mean if missing (missing for a lot of values)
-##If time, test whether we predict better if have the full data
-
-
-##plot fit to see how it improves with each tree (how many trees should I make?)
+##Step 2: decide how many trees need to be run
+##plot fit to see how it improves with each tree
 plot(fit)
 
+##identify the minimum mse by number of trees
+which.min(fit$mse)
+  ##although we don't get that much return by fitting more trees, the minimum mse is at 488 trees so we will fit that many in analyses below.
+
+##Step 3: tune the "mtry" variable which defines how many features are randomly selected at each split. By default, it uses 2 (we can see this in the output of "fit" and the default for numeric responses is max(floor(ncol(x)/3))
+##NOTE: This takes about 20 minutes so don't need to re-run
+
+# ctrl <- trainControl(method="repeatedcv", 
+#                      number=10, 
+#                      repeats=10,
+#                      verboseIter = TRUE)
+# 
+# grid_rf <-expand.grid(.mtry = c(1, 2, 4, 6))
+# 
+# m_rf <- train(points ~ price + longitude + latitude  + variety +
+#                       year + avgtemp + avgprcp,
+#               data=wine_v7_ml, method="rf", 
+#               metric="RMSE", trcontrol=ctrl, 
+#               tuneGrid=grid_rf)
+# 
+# m_rf
+
+#Re-fit the random forest with mtry=6
+fit <- randomForest(points ~ price + longitude + latitude  + variety +
+                      year + avgtemp + avgprcp,
+                    data=wine_v7_ml, 
+                    importance=TRUE, 
+                    ntree=500,
+                    mtry=6)
+
+fit
+
+#Also, check that this RMSE is similar (for mtry=2) to that output from the model. In general, random forest is less susceptible to overfitting so cross-validation is not always necessary.
+
+
 ##plot the variable importance
-varImpPlot(cross.sell.rf,
+# jpeg(filename="predvsactual.jpg", width = 710, height = 480)
+varImpPlot(fit,
            sort = T,
-           main="Variable Importance",
-           n.var=5)
+           main="Variable Importance")
 
 
-##suggestions:
-# Try setting the nodesize = 25 and tree = 50 and see if you are able to at least build one RF and then plot the oob.error vs no. of trees and gradually increase the no. of trees. For plotting & adding additional trees to an exisiting forest, refer to r RF documentation,
+##Plot the actual vs predicted values (a visual way of looking at the error)
+pred.forest <- predict(fit,wine_v7_ml)
 
-##calculate the RMSE
+p <- wine_v7_ml %>% 
+  ggplot(aes(points, pred.forest)) +
+  geom_point()  +
+  geom_smooth(method = "lm", size = 1.5) +
+  labs(y= "Predicted Ratings", x="Actual Ratings",title="Predicted vs. Actual Ratings Using Random Forest") +
+  theme_economist()
 
-##Plot the actual vs predicted values in the 
+ jpeg(filename="predvsactual.jpg", width = 426, height = 288)
+ p
+ dev.off()
+ 
+ fit
 
 
 ```
